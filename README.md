@@ -21,4 +21,4 @@ Preview images associated with caption files (.txt) in Neovim.
         })
     end
 }
-````
+```

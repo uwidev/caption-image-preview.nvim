@@ -1,28 +1,36 @@
 -- Main entry point
-local config = require('caption-image-preview.config')
-local preview = require('caption-image-preview.preview')
+local config = require("caption-image-preview.config")
+local preview = require("caption-image-preview.preview")
 
 local M = {}
 
 function M.setup(opts)
-    config.setup(opts)
+	config.setup(opts)
 
-    -- Create user commands
-    vim.api.nvim_create_user_command('CaptionImagePreviewToggle', preview.toggle, {})
-    vim.api.nvim_create_user_command('CaptionImagePreviewRefresh', preview.refresh, {})
+	-- Create user commands
+	vim.api.nvim_create_user_command("CaptionImagePreviewToggle", preview.toggle, {})
+	vim.api.nvim_create_user_command("CaptionImagePreviewRefresh", preview.refresh, {})
 
-    -- Create keymaps
-    local prefix = config.options.keymap_prefix or '<leader>'
-    vim.api.nvim_set_keymap('n', prefix .. 'cip', ':CaptionImagePreviewToggle<CR>', {
-        silent = true,
-        noremap = true,
-        desc = "Toggle caption image preview"
-    })
-    vim.api.nvim_set_keymap('n', prefix .. 'cir', ':CaptionImagePreviewRefresh<CR>', {
-        silent = true,
-        noremap = true,
-        desc = "Refresh caption image preview"
-    })
+	-- Create keymaps (if enabled)
+	local keymaps = config.options.keymaps or {}
+
+	-- Toggle keymap
+	if keymaps.toggle then
+		vim.api.nvim_set_keymap("n", keymaps.toggle, ":CaptionImagePreviewToggle<CR>", {
+			silent = true,
+			noremap = true,
+			desc = "Toggle caption image preview",
+		})
+	end
+
+	-- Refresh keymap
+	if keymaps.refresh then
+		vim.api.nvim_set_keymap("n", keymaps.refresh, ":CaptionImagePreviewRefresh<CR>", {
+			silent = true,
+			noremap = true,
+			desc = "Refresh caption image preview",
+		})
+	end
 end
 
 -- Expose internal modules for advanced usage
