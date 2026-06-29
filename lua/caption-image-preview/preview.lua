@@ -6,15 +6,14 @@ local state = {
 	win = nil,
 	buf = nil,
 	image = nil,
+	updating = false, -- Prevent recursive updates
 }
 
--- Check if we have image.nvim
 local function has_image_nvim()
 	local ok, _ = pcall(require, "image")
 	return ok
 end
 
--- Use user's existing image.nvim settings
 local function get_image()
 	if not has_image_nvim() then
 		vim.notify("caption-image-preview: image.nvim not installed", vim.log.levels.ERROR)
@@ -57,7 +56,11 @@ local function clear_image()
 end
 
 local function render_preview(buf, win, image_path)
-	clear_image()
+	if state.updating then
+		return
+	end
+	state.updating = true
+
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
 
 	if not image_path then
@@ -68,11 +71,13 @@ local function render_preview(buf, win, image_path)
 			"",
 			"Press q or <Esc> to close",
 		})
+		state.updating = false
 		return
 	end
 
 	local image = get_image()
 	if not image then
+		state.updating = false
 		return
 	end
 
@@ -82,10 +87,8 @@ local function render_preview(buf, win, image_path)
 			buffer = buf,
 			x = 0,
 			y = 0,
-			-- Use percentages to fill the window
 			max_width_window_percentage = 100,
 			max_height_window_percentage = 100,
-			-- Virtual padding helps with rendering
 			with_virtual_padding = true,
 			inline = true,
 		})
@@ -93,8 +96,11 @@ local function render_preview(buf, win, image_path)
 		if img then
 			vim.schedule(function()
 				img:render()
+				state.updating = false
 			end)
 			state.image = img
+		else
+			state.updating = false
 		end
 	end)
 
@@ -105,11 +111,16 @@ local function render_preview(buf, win, image_path)
 			"",
 			"Press q or <Esc> to close",
 		})
+		state.updating = false
 	end
 end
 
 local function update_preview()
 	if not state.active then
+		return
+	end
+
+	if state.updating then
 		return
 	end
 
@@ -126,6 +137,7 @@ local function update_preview()
 		return
 	end
 
+	clear_image()
 	local image_path = find_image(current_file)
 	render_preview(state.buf, state.win, image_path)
 end
@@ -198,14 +210,23 @@ end
 local function setup_autocmds()
 	local group = vim.api.nvim_create_augroup("CaptionImagePreview", { clear = true })
 
+	-- Only update on BufEnter for caption files, but NOT for the preview buffer
 	if config.options.auto_update then
 		vim.api.nvim_create_autocmd("BufEnter", {
 			group = group,
 			pattern = config.options.caption_patterns,
-			callback = update_preview,
+			callback = function()
+				-- Don't update if we're in the preview buffer
+				local current_buf = vim.api.nvim_get_current_buf()
+				if current_buf == state.buf then
+					return
+				end
+				update_preview()
+			end,
 		})
 	end
 
+	-- WinClosed: only clean up if it's our window
 	vim.api.nvim_create_autocmd("WinClosed", {
 		group = group,
 		callback = function(args)
