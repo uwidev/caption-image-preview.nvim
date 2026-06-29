@@ -1,22 +1,27 @@
 -- Default configuration
 local defaults = {
-	split_ratio = 0.4, -- 40% of screen width
+	split_ratio = 0.4,
 	extensions = { ".jpg", ".jpeg", ".png", ".webp", ".gif" },
 	caption_patterns = { "*.txt" },
-	auto_update = true, -- Auto-update on buffer switch
-	-- Keymaps: set to false to disable, or provide a string for custom keymap
+	auto_update = true,
 	keymaps = {
-		toggle = "<leader>cip", -- Toggle preview
-		refresh = "<leader>cir", -- Refresh preview
+		toggle = "<leader>cip",
+		refresh = "<leader>cir",
 	},
 }
 
 local M = {}
 
-M.options = vim.deepcopy(defaults)
-
 function M.setup(opts)
-	M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
+	M.options = vim.tbl_deep_extend("keep", vim.deepcopy(defaults), opts or {})
 end
+
+-- Provide a way to get config without side effects
+function M.get()
+	return M.options
+end
+
+-- Initialize on load so users don't have to call setup
+M.setup({})
 
 return M

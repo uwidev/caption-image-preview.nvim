@@ -37,4 +37,7 @@ end
 M.config = config
 M.preview = preview
 
+-- Auto-setup so users can just require the plugin
+M.setup({})
+
 return M

@@ -9,9 +9,8 @@ Preview images associated with caption files (.txt) in Neovim.
 
 ## Installation
 
-### Lazy.nvim
-
 ```lua
+-- lazy.nvim
 {
     "uwidev/caption-image-preview.nvim",
     config = function()
