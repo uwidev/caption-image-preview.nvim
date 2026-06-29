@@ -1,8 +1,6 @@
 local M = {}
 
 local config = require("caption-image-preview.config")
-local image_nvim = nil -- Cache the module
-
 local state = {
 	active = false,
 	win = nil,
@@ -11,7 +9,8 @@ local state = {
 	updating = false,
 }
 
--- Cache image.nvim module once
+local image_nvim = nil
+
 local function get_image()
 	if image_nvim then
 		return image_nvim
@@ -66,13 +65,11 @@ local function show_message(buf, lines)
 end
 
 local function render_preview(buf, win, image_path)
-	-- Prevent recursive updates
 	if state.updating then
 		return
 	end
 	state.updating = true
 
-	-- Clean up after render (always runs)
 	local function cleanup()
 		state.updating = false
 	end
@@ -128,16 +125,41 @@ local function render_preview(buf, win, image_path)
 	end
 end
 
+local function close_preview()
+	clear_image()
+
+	if state.win and vim.api.nvim_win_is_valid(state.win) then
+		local wins = vim.api.nvim_list_wins()
+		if #wins > 1 then
+			pcall(function()
+				vim.api.nvim_win_close(state.win, true)
+			end)
+		end
+	end
+
+	state.active = false
+	state.win = nil
+	state.buf = nil
+	state.image = nil
+end
+
 local function update_preview()
 	if not state.active or state.updating then
 		return
 	end
 
-	if not vim.api.nvim_win_is_valid(state.win) or not vim.api.nvim_buf_is_valid(state.buf) then
-		state.active = false
-		state.win = nil
-		state.buf = nil
-		state.image = nil
+	if state.win and not vim.api.nvim_win_is_valid(state.win) then
+		close_preview()
+		return
+	end
+
+	if not state.win or not state.buf then
+		close_preview()
+		return
+	end
+
+	if not vim.api.nvim_buf_is_valid(state.buf) then
+		close_preview()
 		return
 	end
 
@@ -157,13 +179,7 @@ function M.toggle()
 	end
 
 	if state.active then
-		clear_image()
-		if state.win and vim.api.nvim_win_is_valid(state.win) then
-			vim.api.nvim_win_close(state.win, true)
-		end
-		state.active = false
-		state.win = nil
-		state.buf = nil
+		close_preview()
 		return
 	end
 
@@ -176,41 +192,35 @@ function M.toggle()
 	local original_win = vim.api.nvim_get_current_win()
 	local opts = config.get()
 
-	-- Create preview buffer
 	local preview_buf = vim.api.nvim_create_buf(false, true)
 	local preview_name = "[Preview] " .. vim.fn.fnamemodify(current_file, ":t:r")
 	vim.api.nvim_buf_set_name(preview_buf, preview_name)
-	vim.api.nvim_buf_set_option(preview_buf, "buftype", "nofile")
-	vim.api.nvim_buf_set_option(preview_buf, "bufhidden", "wipe")
-	vim.api.nvim_buf_set_option(preview_buf, "swapfile", false)
+	vim.api.nvim_set_option_value("buftype", "nofile", { buf = preview_buf })
+	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = preview_buf })
+	vim.api.nvim_set_option_value("swapfile", false, { buf = preview_buf })
 
-	-- Create split
 	local split_width = math.floor(vim.o.columns * opts.split_ratio)
-	vim.api.nvim_command("vsplit")
+	vim.cmd("vsplit")
 	vim.api.nvim_win_set_buf(0, preview_buf)
 	vim.api.nvim_win_set_width(0, split_width)
 
-	-- Store state
 	state.win = vim.api.nvim_get_current_win()
 	state.buf = preview_buf
 	state.active = true
 	state.image = nil
 
-	-- Render image
 	local image_path = find_image(current_file)
 	render_preview(state.buf, state.win, image_path)
 
-	-- Keymaps for preview buffer
-	vim.api.nvim_buf_set_keymap(state.buf, "n", "q", ":bd!<CR>", {
+	vim.api.nvim_buf_set_keymap(state.buf, "n", "q", ':lua require("caption-image-preview.preview").toggle()<CR>', {
 		silent = true,
 		noremap = true,
 	})
-	vim.api.nvim_buf_set_keymap(state.buf, "n", "<Esc>", ":bd!<CR>", {
+	vim.api.nvim_buf_set_keymap(state.buf, "n", "<Esc>", ':lua require("caption-image-preview.preview").toggle()<CR>', {
 		silent = true,
 		noremap = true,
 	})
 
-	-- Return focus
 	vim.api.nvim_set_current_win(original_win)
 end
 
@@ -218,15 +228,19 @@ function M.refresh()
 	update_preview()
 end
 
+function M.get_state()
+	return state
+end
+
 local function setup_autocmds()
 	local group = vim.api.nvim_create_augroup("CaptionImagePreview", { clear = true })
+	local opts = config.get()
 
-	if config.get().auto_update then
+	if opts.auto_update then
 		vim.api.nvim_create_autocmd("BufEnter", {
 			group = group,
-			pattern = config.get().caption_patterns,
+			pattern = opts.caption_patterns,
 			callback = function()
-				-- Skip if we're in the preview buffer
 				if vim.api.nvim_get_current_buf() == state.buf then
 					return
 				end
@@ -239,17 +253,12 @@ local function setup_autocmds()
 		group = group,
 		callback = function(args)
 			if state.win and tonumber(args.match) == state.win then
-				clear_image()
-				state.active = false
-				state.win = nil
-				state.buf = nil
-				state.image = nil
+				close_preview()
 			end
 		end,
 	})
 end
 
--- Initialize
 setup_autocmds()
 
 return M
