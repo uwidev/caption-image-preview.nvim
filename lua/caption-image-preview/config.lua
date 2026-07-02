@@ -14,20 +14,8 @@ local defaults = {
 local M = {}
 M.options = vim.deepcopy(defaults)
 
-local function deepcopy(orig)
-	if type(orig) ~= "table" then
-		return orig
-	end
-	local copy = {}
-	for k, v in pairs(orig) do
-		copy[k] = deepcopy(v)
-	end
-	setmetatable(copy, getmetatable(orig))
-	return copy
-end
-
 local function validate_config(opts)
-	local valid = deepcopy(opts)
+	local valid = vim.deepcopy(opts)
 
 	if valid.split_ratio then
 		if type(valid.split_ratio) ~= "number" or valid.split_ratio < 0 or valid.split_ratio > 1 then
@@ -68,15 +56,15 @@ end
 
 function M.setup(opts)
 	local user_opts = validate_config(opts or {})
-	M.options = vim.tbl_deep_extend("force", deepcopy(defaults), user_opts)
+	M.options = vim.tbl_deep_extend("force", defaults, user_opts)
 end
 
 function M.get()
-	return deepcopy(M.options)
+	return vim.deepcopy(M.options)
 end
 
 function M.get_defaults()
-	return deepcopy(defaults)
+	return vim.deepcopy(defaults)
 end
 
 function M.get_value(key)
@@ -84,7 +72,7 @@ function M.get_value(key)
 end
 
 function M.reload()
-	M.options = deepcopy(defaults)
+	M.options = vim.deepcopy(defaults)
 end
 
 return M
