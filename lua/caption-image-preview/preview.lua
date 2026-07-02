@@ -450,6 +450,7 @@ function M.toggle()
 	state.active = true
 	state.image = nil
 	state.last_file = current_file
+	state.current_image_path = nil
 
 	local image_path = find_image(current_file)
 	render_preview(state.buf, state.win, image_path)
@@ -584,6 +585,11 @@ local function setup_autocmds()
 
 	if opts.auto_update then
 		local function handle_update()
+			-- Only proceed if the preview is active
+			if not state.active then
+				return
+			end
+
 			if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
 				if vim.api.nvim_get_current_buf() == state.buf then
 					return
@@ -593,6 +599,9 @@ local function setup_autocmds()
 			local current_file = vim.api.nvim_buf_get_name(0)
 			if current_file ~= "" and is_caption_file(current_file) then
 				schedule_update()
+				if opts.auto_adjust_split then
+					M.adjust_split()
+				end
 			end
 		end
 

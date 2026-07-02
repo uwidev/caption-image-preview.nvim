@@ -5,6 +5,7 @@ local defaults = {
 	extensions = { ".jpg", ".jpeg", ".png", ".webp", ".gif" },
 	caption_patterns = { "*.txt" },
 	auto_update = true,
+	auto_adjust_split = false,
 	split_padding = 2,
 	render_height_percent = 96, -- percentage of window height to use (avoid bottom clipping)
 	keymaps = {
@@ -36,6 +37,11 @@ local function validate_config(opts)
 	if valid.auto_update and type(valid.auto_update) ~= "boolean" then
 		vim.notify("caption-image-preview: auto_update must be a boolean, using default", vim.log.levels.WARN)
 		valid.auto_update = defaults.auto_update
+	end
+
+	if valid.auto_adjust_split and type(valid.auto_adjust_split) ~= "boolean" then
+		vim.notify("caption-image-preview: auto_adjust_split must be a boolean, using default", vim.log.levels.WARN)
+		valid.auto_adjust_split = defaults.auto_adjust_split
 	end
 
 	if valid.split_padding and type(valid.split_padding) ~= "number" then

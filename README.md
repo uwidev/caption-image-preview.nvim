@@ -46,15 +46,19 @@ require('caption-image-preview').setup {
 
 ## Configuration
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `split_ratio` | number | 0.4 | Fraction of screen width for the preview window (0–1). |
-| `extensions` | table | {".jpg",".jpeg",".png",".webp",".gif"} | Image file extensions to look for. |
-| `caption_patterns` | table | {"*.txt"} | File patterns for caption files. |
-| `auto_update` | boolean | true | Automatically update preview on buffer enter and text changes. |
-| `split_padding` | number | 2 | Extra columns to add after the longest line when using `:CaptionImagePreviewAdjust`. |
-| `render_height_percent` | number | 95 | Maximum height percentage for the rendered image (1–100). |
-| `keymaps` | table | See below | Keymap overrides. Disable with `false`. |
+|Option                 |Type   |Default                               |Description                                                                                         |
+|-----------------------|-------|--------------------------------------|----------------------------------------------------------------------------------------------------|
+|`split_ratio`          |number |0.4                                   |Fraction of screen width for the preview window (0–1).                                            |
+|`extensions`           |table  |{".jpg",".jpeg",".png",".webp",".gif"}|Image file extensions to look for.                                                                  |
+|`caption_patterns`     |table  |{"*.txt"}                             |File patterns for caption files.                                                                    |
+|`auto_update`          |boolean|true                                  |Automatically update preview on buffer enter and text changes.                                      |
+|`split_padding`        |number |2                                     |Extra columns to add after the longest line when using `:CaptionImagePreviewAdjust`.                |
+|`render_height_percent`|number |95                                    |Maximum height percentage for the rendered image (1–100).                                         |
+|`keymaps`              |table  |See below                             |Keymap overrides. Disable with `false`.                                                             |
+|`auto_adjust_split`    |boolean|false                                 |Automatically adjust split position on toggle and buffer change (uses `:CaptionImagePreviewAdjust`).|
+
+### On `auto_adjust_split`
+Enable this if you frequently navigate between caption files and want the preview window to automatically reposition itself to the longest line. Default is `false` to avoid unexpected layout changes.
 
 ### Keymaps
 
