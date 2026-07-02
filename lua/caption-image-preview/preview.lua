@@ -13,8 +13,9 @@ local state = {
 
 local image_nvim = nil
 local image_cache = {}
-local file_cache = {} -- Cache for fnamemodify results
-local path_cache = {} -- Cache for directory/file paths
+local caption_cache = {} -- cache for is_caption_file results (boolean)
+local basename_cache = {} -- cache for fnamemodify results (string)
+local path_cache = {} -- cache for directory/file paths
 
 local function get_image()
 	if image_nvim then
@@ -46,14 +47,14 @@ local function is_caption_file(filepath)
 
 	local sanitized = sanitize_path(filepath)
 
-	-- Check cache
-	if file_cache[sanitized] ~= nil then
-		return file_cache[sanitized]
+	-- Check caption cache
+	if caption_cache[sanitized] ~= nil then
+		return caption_cache[sanitized]
 	end
 
 	local ext = vim.fn.fnamemodify(sanitized, ":e"):lower()
 	local result = ext == "txt"
-	file_cache[sanitized] = result
+	caption_cache[sanitized] = result
 	return result
 end
 
@@ -159,20 +160,20 @@ local function update_buffer_name(buf, image_path)
 
 	if sanitized and sanitized ~= "" then
 		local cache_key = sanitized
-		if file_cache[cache_key] == nil then
-			file_cache[cache_key] = vim.fn.fnamemodify(sanitized, ":t:r")
+		if basename_cache[cache_key] == nil then
+			basename_cache[cache_key] = vim.fn.fnamemodify(sanitized, ":t:r")
 		end
-		name = "[Preview] " .. file_cache[cache_key]
+		name = "[Preview] " .. basename_cache[cache_key]
 	else
 		if state.last_file then
 			local cache_key = state.last_file
-			if file_cache[cache_key] == nil then
-				file_cache[cache_key] = vim.fn.fnamemodify(state.last_file, ":t:r")
+			if basename_cache[cache_key] == nil then
+				basename_cache[cache_key] = vim.fn.fnamemodify(state.last_file, ":t:r")
 			end
-			name = "[Preview] " .. file_cache[cache_key]
+			name = "[Preview] " .. basename_cache[cache_key]
 		else
-			local current_name = pcall(vim.api.nvim_buf_get_name, buf)
-			if current_name and current_name ~= "" then
+			local ok, current_name = pcall(vim.api.nvim_buf_get_name, buf)
+			if ok and current_name and current_name ~= "" then
 				name = current_name
 			else
 				name = "[Preview]"
@@ -205,10 +206,10 @@ local function render_preview(buf, win, image_path)
 		local basename
 		if state.last_file then
 			local cache_key = state.last_file
-			if file_cache[cache_key] == nil then
-				file_cache[cache_key] = vim.fn.fnamemodify(state.last_file, ":t:r")
+			if basename_cache[cache_key] == nil then
+				basename_cache[cache_key] = vim.fn.fnamemodify(state.last_file, ":t:r")
 			end
-			basename = file_cache[cache_key]
+			basename = basename_cache[cache_key]
 		else
 			basename = "unknown"
 		end
