@@ -35,7 +35,6 @@ local function sanitize_path(path)
 	if not path or path == "" then
 		return ""
 	end
-	-- Remove null bytes and control characters
 	local sanitized = path:gsub("%z", ""):gsub("[%c]", "")
 	return sanitized
 end
@@ -46,8 +45,6 @@ local function is_caption_file(filepath)
 	end
 
 	local sanitized = sanitize_path(filepath)
-
-	-- Check caption cache
 	if caption_cache[sanitized] ~= nil then
 		return caption_cache[sanitized]
 	end
@@ -65,7 +62,6 @@ local function find_image(caption_path)
 
 	local sanitized = sanitize_path(caption_path)
 
-	-- Fast cache lookup
 	local cached = image_cache[sanitized]
 	if cached ~= nil then
 		if cached == false then
@@ -74,12 +70,10 @@ local function find_image(caption_path)
 		if vim.fn.filereadable(cached) == 1 then
 			return cached
 		else
-			-- File was deleted, clear cache
 			image_cache[sanitized] = nil
 		end
 	end
 
-	-- Cache path components
 	local cache_key = sanitized
 	if path_cache[cache_key] == nil then
 		local dir = vim.fn.fnamemodify(sanitized, ":h")
@@ -107,7 +101,6 @@ local function find_image(caption_path)
 		return found_path
 	end
 
-	-- Cache the miss too
 	image_cache[sanitized] = false
 	return nil
 end
@@ -203,16 +196,9 @@ local function render_preview(buf, win, image_path)
 	clear_buffer(buf)
 
 	if not image_path then
-		local basename
-		if state.last_file then
-			local cache_key = state.last_file
-			if basename_cache[cache_key] == nil then
-				basename_cache[cache_key] = vim.fn.fnamemodify(state.last_file, ":t:r")
-			end
-			basename = basename_cache[cache_key]
-		else
-			basename = "unknown"
-		end
+		local basename = state.last_file
+				and (basename_cache[state.last_file] or vim.fn.fnamemodify(state.last_file, ":t:r"))
+			or "unknown"
 		set_message(buf, {
 			"No image found",
 			"Looking for: " .. basename .. ".[jpg,png,webp]",
@@ -232,17 +218,28 @@ local function render_preview(buf, win, image_path)
 		return
 	end
 
-	-- Use pcall for image creation
+	-- Compute usable area of the preview window
+	local win_height = vim.api.nvim_win_get_height(win)
+	local win_width = vim.api.nvim_win_get_width(win)
+
+	local statusline_rows = (vim.o.laststatus > 0) and 1 or 0
+	local winbar_rows = (vim.wo[win].winbar and #vim.wo[win].winbar > 0) and 1 or 0
+	-- Subtract 1 extra row as safety margin to avoid overlap with statusline/winbar
+	local usable_height = math.max(1, win_height - statusline_rows - winbar_rows - 1)
+	local usable_width = win_width
+
 	local ok, img = pcall(function()
 		return image.from_file(image_path, {
 			window = win,
 			buffer = buf,
 			x = 0,
 			y = 0,
+			width = usable_width,
+			height = usable_height,
 			max_width_window_percentage = 100,
 			max_height_window_percentage = 100,
-			with_virtual_padding = true,
-			inline = true,
+			with_virtual_padding = false,
+			inline = false,
 		})
 	end)
 
@@ -252,41 +249,37 @@ local function render_preview(buf, win, image_path)
 		return
 	end
 
-	if img then
-		state.image = img
-		-- Use vim.schedule to avoid blocking
-		vim.schedule(function()
-			local render_ok, render_err = pcall(function()
-				if
-					state.active
-					and state.win == win
-					and state.buf == buf
-					and vim.api.nvim_win_is_valid(win)
-					and vim.api.nvim_buf_is_valid(buf)
-				then
-					img:render()
-				else
-					img:clear()
-					if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
-						clear_buffer(state.buf)
-					end
-				end
-			end)
-			if not render_ok then
-				vim.notify(
-					"caption-image-preview: Error rendering image: " .. tostring(render_err),
-					vim.log.levels.ERROR
-				)
-			end
-			state.updating = false
-		end)
-	else
+	if not img then
 		cleanup()
+		return
 	end
+
+	state.image = img
+	local render_ok, render_err = pcall(function()
+		if
+			state.active
+			and state.win == win
+			and state.buf == buf
+			and vim.api.nvim_win_is_valid(win)
+			and vim.api.nvim_buf_is_valid(buf)
+		then
+			img:render()
+		else
+			img:clear()
+			if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+				clear_buffer(state.buf)
+			end
+		end
+	end)
+
+	if not render_ok then
+		vim.notify("caption-image-preview: Error rendering image: " .. tostring(render_err), vim.log.levels.ERROR)
+	end
+
+	cleanup()
 end
 
 local function close_preview()
-	-- Cancel pending update
 	if state.update_timer then
 		local success, err = pcall(function()
 			state.update_timer:stop()
@@ -317,7 +310,6 @@ local function close_preview()
 end
 
 local function schedule_update()
-	-- Cancel pending
 	if state.update_timer then
 		local success, err = pcall(function()
 			state.update_timer:stop()
@@ -387,7 +379,6 @@ function M.toggle()
 
 	local preview_buf = vim.api.nvim_create_buf(false, true)
 
-	-- Set buffer options with error handling
 	local function set_buffer_options(buf)
 		local options = {
 			buftype = "nofile",
@@ -451,6 +442,118 @@ function M.get_state()
 	return state
 end
 
+function M.adjust_split()
+	if not state.active then
+		vim.notify("caption-image-preview: Preview not active", vim.log.levels.WARN)
+		return
+	end
+
+	if not state.win or not vim.api.nvim_win_is_valid(state.win) then
+		vim.notify("caption-image-preview: Preview window is invalid", vim.log.levels.WARN)
+		return
+	end
+
+	local left_win = nil
+	local wins = vim.api.nvim_list_wins()
+	for _, w in ipairs(wins) do
+		if w ~= state.win then
+			left_win = w
+			break
+		end
+	end
+
+	if not left_win then
+		vim.notify("caption-image-preview: No other window found", vim.log.levels.WARN)
+		return
+	end
+
+	local buf = vim.api.nvim_win_get_buf(left_win)
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+	local max_len = 0
+	for _, line in ipairs(lines) do
+		if not line:match("%.$") then
+			local len = #line
+			if len > max_len then
+				max_len = len
+			end
+		end
+	end
+
+	local wininfo = vim.fn.getwininfo(left_win)[1]
+	if not wininfo then
+		vim.notify("caption-image-preview: Cannot get window info", vim.log.levels.WARN)
+		return
+	end
+	local textoff = wininfo.textoff
+
+	local opts = config.get()
+	local padding = opts.split_padding or 2
+	local total_cols = vim.o.columns
+
+	local desired_split_col = textoff + max_len + padding
+
+	local min_ratio = opts.split_ratio or 0.4
+	local min_preview_width = math.floor(total_cols * min_ratio)
+	if min_preview_width < 1 then
+		min_preview_width = 1
+	end
+
+	local max_split_col = total_cols - min_preview_width
+	if desired_split_col > max_split_col then
+		desired_split_col = max_split_col
+	end
+
+	if desired_split_col < 1 then
+		desired_split_col = 1
+	end
+
+	local new_preview_width = total_cols - desired_split_col
+	vim.api.nvim_win_set_width(state.win, new_preview_width)
+
+	vim.notify(
+		string.format(
+			"Preview adjusted: split at col %d (width %d, textoff %d, max_len %d)",
+			desired_split_col,
+			new_preview_width,
+			textoff,
+			max_len
+		),
+		vim.log.levels.INFO
+	)
+end
+
+function M.reset_split()
+	if not state.active then
+		vim.notify("caption-image-preview: Preview not active", vim.log.levels.WARN)
+		return
+	end
+
+	if not state.win or not vim.api.nvim_win_is_valid(state.win) then
+		vim.notify("caption-image-preview: Preview window is invalid", vim.log.levels.WARN)
+		return
+	end
+
+	local opts = config.get()
+	local total_cols = vim.o.columns
+	local min_ratio = opts.split_ratio or 0.4
+
+	local preview_width = math.floor(total_cols * min_ratio)
+	if preview_width < 1 then
+		preview_width = 1
+	end
+	if preview_width > total_cols - 1 then
+		preview_width = total_cols - 1
+	end
+
+	vim.api.nvim_win_set_width(state.win, preview_width)
+
+	vim.notify(
+		string.format("Preview reset to ratio: width %d (%.1f%%)", preview_width, min_ratio * 100),
+		vim.log.levels.INFO
+	)
+end
+
 local function setup_autocmds()
 	local group = vim.api.nvim_create_augroup("CaptionImagePreview", { clear = true })
 	local opts = config.get()
@@ -488,131 +591,15 @@ local function setup_autocmds()
 			end
 		end,
 	})
-end
 
--- Dynamic adjust of split based on the left buffer
-function M.adjust_split()
-	-- Ensure preview is active
-	if not state.active then
-		vim.notify("caption-image-preview: Preview not active", vim.log.levels.WARN)
-		return
-	end
-
-	if not state.win or not vim.api.nvim_win_is_valid(state.win) then
-		vim.notify("caption-image-preview: Preview window is invalid", vim.log.levels.WARN)
-		return
-	end
-
-	-- Find the left window (any window that is not the preview window)
-	local left_win = nil
-	local wins = vim.api.nvim_list_wins()
-	for _, w in ipairs(wins) do
-		if w ~= state.win then
-			left_win = w
-			break
-		end
-	end
-
-	if not left_win then
-		vim.notify("caption-image-preview: No other window found", vim.log.levels.WARN)
-		return
-	end
-
-	local buf = vim.api.nvim_win_get_buf(left_win)
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-
-	-- Find the longest line that does NOT end with a period
-	local max_len = 0
-	for _, line in ipairs(lines) do
-		if not line:match("%.$") then
-			local len = #line
-			if len > max_len then
-				max_len = len
+	vim.api.nvim_create_autocmd("WinResized", {
+		group = group,
+		callback = function(args)
+			if state.active and state.win and tonumber(args.win) == state.win then
+				M.refresh()
 			end
-		end
-	end
-
-	-- Get the window's text offset (gutter width in screen columns)
-	local wininfo = vim.fn.getwininfo(left_win)[1]
-	if not wininfo then
-		vim.notify("caption-image-preview: Cannot get window info", vim.log.levels.WARN)
-		return
-	end
-	local textoff = wininfo.textoff
-
-	-- Use padding from config
-	local opts = config.get()
-	local padding = opts.split_padding or 2
-
-	local total_cols = vim.o.columns
-
-	local desired_split_col = textoff + max_len + padding
-
-	-- Enforce minimum preview width (split_ratio)
-	local min_ratio = opts.split_ratio or 0.4
-	local min_preview_width = math.floor(total_cols * min_ratio)
-	if min_preview_width < 1 then
-		min_preview_width = 1
-	end
-
-	local max_split_col = total_cols - min_preview_width
-	if desired_split_col > max_split_col then
-		desired_split_col = max_split_col
-	end
-
-	if desired_split_col < 1 then
-		desired_split_col = 1
-	end
-
-	local new_preview_width = total_cols - desired_split_col
-	vim.api.nvim_win_set_width(state.win, new_preview_width)
-
-	vim.notify(
-		string.format(
-			"Preview adjusted: split at col %d (width %d, textoff %d, max_len %d)",
-			desired_split_col,
-			new_preview_width,
-			textoff,
-			max_len
-		),
-		vim.log.levels.INFO
-	)
-end
-
--- Reset split to user's split ratio
-function M.reset_split()
-	-- Ensure preview is active
-	if not state.active then
-		vim.notify("caption-image-preview: Preview not active", vim.log.levels.WARN)
-		return
-	end
-
-	if not state.win or not vim.api.nvim_win_is_valid(state.win) then
-		vim.notify("caption-image-preview: Preview window is invalid", vim.log.levels.WARN)
-		return
-	end
-
-	local opts = config.get()
-	local total_cols = vim.o.columns
-	local min_ratio = opts.split_ratio or 0.4
-
-	-- Calculate preview width from ratio
-	local preview_width = math.floor(total_cols * min_ratio)
-	if preview_width < 1 then
-		preview_width = 1
-	end
-
-	-- Ensure we don't make it wider than the total columns minus 1
-	if preview_width > total_cols - 1 then
-		preview_width = total_cols - 1
-	end
-
-	vim.api.nvim_win_set_width(state.win, preview_width)
-
-	vim.notify(
-		string.format("Preview reset to ratio: width %d (%.1f%%)", preview_width, min_ratio * 100),
-		vim.log.levels.INFO
-	)
+		end,
+	})
 end
 
 setup_autocmds()
