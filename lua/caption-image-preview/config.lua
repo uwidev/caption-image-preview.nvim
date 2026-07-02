@@ -6,11 +6,12 @@ local defaults = {
 	caption_patterns = { "*.txt" },
 	auto_update = true,
 	split_padding = 2,
+	render_height_percent = 96, -- percentage of window height to use (avoid bottom clipping)
 	keymaps = {
 		toggle = "<leader>cip",
 		refresh = "<leader>cir",
 		adjust = "<leader>cia",
-		reset = "<leader>civ"
+		reset = "<leader>civ",
 	},
 }
 
@@ -40,6 +41,11 @@ local function validate_config(opts)
 	if valid.split_padding and type(valid.split_padding) ~= "number" then
 		vim.notify("caption-image-preview: split_padding must be a number, using default", vim.log.levels.WARN)
 		valid.split_padding = defaults.split_padding
+	end
+
+	if valid.render_height_percent and type(valid.render_height_percent) ~= "number" then
+		vim.notify("caption-image-preview: render_height_percent must be a number, using default", vim.log.levels.WARN)
+		valid.render_height_percent = defaults.render_height_percent
 	end
 
 	if valid.keymaps then

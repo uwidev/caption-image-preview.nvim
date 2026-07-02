@@ -193,6 +193,7 @@ local function render_preview(buf, win, image_path)
 		state.updating = false
 	end
 
+	clear_image()
 	update_buffer_name(buf, image_path)
 	clear_buffer(buf)
 
@@ -223,15 +224,8 @@ local function render_preview(buf, win, image_path)
 		return
 	end
 
-	-- Compute usable area of the preview window
-	local win_height = vim.api.nvim_win_get_height(win)
-	local win_width = vim.api.nvim_win_get_width(win)
-
-	local statusline_rows = (vim.o.laststatus > 0) and 1 or 0
-	local winbar_rows = (vim.wo[win].winbar and #vim.wo[win].winbar > 0) and 1 or 0
-	-- Subtract 1 extra row as safety margin to avoid overlap with statusline/winbar
-	local usable_height = math.max(1, win_height - statusline_rows - winbar_rows - 1)
-	local usable_width = win_width
+	local opts = config.get()
+	local height_percent = opts.render_height_percent or 95
 
 	local ok, img = pcall(function()
 		return image.from_file(image_path, {
@@ -239,10 +233,8 @@ local function render_preview(buf, win, image_path)
 			buffer = buf,
 			x = 0,
 			y = 0,
-			width = usable_width,
-			height = usable_height,
 			max_width_window_percentage = 100,
-			max_height_window_percentage = 100,
+			max_height_window_percentage = height_percent,
 			with_virtual_padding = false,
 			inline = false,
 		})
