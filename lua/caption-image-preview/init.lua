@@ -53,5 +53,6 @@ end
 -- Expose internal modules for advanced usage
 M.config = config
 M.preview = preview
+M.redraw_preview = preview.redraw_preview
 
 return M

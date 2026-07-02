@@ -9,6 +9,7 @@ local state = {
 	updating = false,
 	update_timer = nil,
 	last_file = nil,
+	current_image_path = nil,
 }
 
 local image_nvim = nil
@@ -195,7 +196,11 @@ local function render_preview(buf, win, image_path)
 	update_buffer_name(buf, image_path)
 	clear_buffer(buf)
 
+	-- Store for later redraws
+	state.current_image_path = image_path
+
 	if not image_path then
+		state.current_image_path = nil
 		local basename = state.last_file
 				and (basename_cache[state.last_file] or vim.fn.fnamemodify(state.last_file, ":t:r"))
 			or "unknown"
@@ -279,6 +284,32 @@ local function render_preview(buf, win, image_path)
 	cleanup()
 end
 
+function M.redraw_preview()
+	if not state.active then
+		vim.notify("caption-image-preview: Preview not active", vim.log.levels.WARN)
+		return
+	end
+
+	if not state.win or not vim.api.nvim_win_is_valid(state.win) then
+		vim.notify("caption-image-preview: Preview window is invalid", vim.log.levels.WARN)
+		return
+	end
+
+	if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
+		vim.notify("caption-image-preview: Preview buffer is invalid", vim.log.levels.WARN)
+		return
+	end
+
+	if not state.current_image_path then
+		vim.notify("caption-image-preview: No image to redraw", vim.log.levels.WARN)
+		return
+	end
+
+	-- Clear the current image to force a fresh render
+	clear_image()
+	render_preview(state.buf, state.win, state.current_image_path)
+end
+
 local function close_preview()
 	if state.update_timer then
 		local success, err = pcall(function()
@@ -291,6 +322,7 @@ local function close_preview()
 		state.update_timer = nil
 	end
 
+	state.current_image_path = nil
 	clear_image()
 
 	if state.win and vim.api.nvim_win_is_valid(state.win) then
