@@ -13,9 +13,9 @@ local state = {
 
 local image_nvim = nil
 local image_cache = {}
-local caption_cache = {} -- cache for is_caption_file results (boolean)
-local basename_cache = {} -- cache for fnamemodify results (string)
-local path_cache = {} -- cache for directory/file paths
+local caption_cache = {}
+local basename_cache = {}
+local path_cache = {}
 
 local function get_image()
 	if image_nvim then
@@ -488,6 +488,131 @@ local function setup_autocmds()
 			end
 		end,
 	})
+end
+
+-- Dynamic adjust of split based on the left buffer
+function M.adjust_split()
+	-- Ensure preview is active
+	if not state.active then
+		vim.notify("caption-image-preview: Preview not active", vim.log.levels.WARN)
+		return
+	end
+
+	if not state.win or not vim.api.nvim_win_is_valid(state.win) then
+		vim.notify("caption-image-preview: Preview window is invalid", vim.log.levels.WARN)
+		return
+	end
+
+	-- Find the left window (any window that is not the preview window)
+	local left_win = nil
+	local wins = vim.api.nvim_list_wins()
+	for _, w in ipairs(wins) do
+		if w ~= state.win then
+			left_win = w
+			break
+		end
+	end
+
+	if not left_win then
+		vim.notify("caption-image-preview: No other window found", vim.log.levels.WARN)
+		return
+	end
+
+	local buf = vim.api.nvim_win_get_buf(left_win)
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+	-- Find the longest line that does NOT end with a period
+	local max_len = 0
+	for _, line in ipairs(lines) do
+		if not line:match("%.$") then
+			local len = #line
+			if len > max_len then
+				max_len = len
+			end
+		end
+	end
+
+	-- Get the window's text offset (gutter width in screen columns)
+	local wininfo = vim.fn.getwininfo(left_win)[1]
+	if not wininfo then
+		vim.notify("caption-image-preview: Cannot get window info", vim.log.levels.WARN)
+		return
+	end
+	local textoff = wininfo.textoff
+
+	-- Use padding from config
+	local opts = config.get()
+	local padding = opts.split_padding or 2
+
+	local total_cols = vim.o.columns
+
+	local desired_split_col = textoff + max_len + padding
+
+	-- Enforce minimum preview width (split_ratio)
+	local min_ratio = opts.split_ratio or 0.4
+	local min_preview_width = math.floor(total_cols * min_ratio)
+	if min_preview_width < 1 then
+		min_preview_width = 1
+	end
+
+	local max_split_col = total_cols - min_preview_width
+	if desired_split_col > max_split_col then
+		desired_split_col = max_split_col
+	end
+
+	if desired_split_col < 1 then
+		desired_split_col = 1
+	end
+
+	local new_preview_width = total_cols - desired_split_col
+	vim.api.nvim_win_set_width(state.win, new_preview_width)
+
+	vim.notify(
+		string.format(
+			"Preview adjusted: split at col %d (width %d, textoff %d, max_len %d)",
+			desired_split_col,
+			new_preview_width,
+			textoff,
+			max_len
+		),
+		vim.log.levels.INFO
+	)
+end
+
+-- Reset split to user's split ratio
+function M.reset_split()
+	-- Ensure preview is active
+	if not state.active then
+		vim.notify("caption-image-preview: Preview not active", vim.log.levels.WARN)
+		return
+	end
+
+	if not state.win or not vim.api.nvim_win_is_valid(state.win) then
+		vim.notify("caption-image-preview: Preview window is invalid", vim.log.levels.WARN)
+		return
+	end
+
+	local opts = config.get()
+	local total_cols = vim.o.columns
+	local min_ratio = opts.split_ratio or 0.4
+
+	-- Calculate preview width from ratio
+	local preview_width = math.floor(total_cols * min_ratio)
+	if preview_width < 1 then
+		preview_width = 1
+	end
+
+	-- Ensure we don't make it wider than the total columns minus 1
+	if preview_width > total_cols - 1 then
+		preview_width = total_cols - 1
+	end
+
+	vim.api.nvim_win_set_width(state.win, preview_width)
+
+	vim.notify(
+		string.format("Preview reset to ratio: width %d (%.1f%%)", preview_width, min_ratio * 100),
+		vim.log.levels.INFO
+	)
 end
 
 setup_autocmds()

@@ -5,9 +5,12 @@ local defaults = {
 	extensions = { ".jpg", ".jpeg", ".png", ".webp", ".gif" },
 	caption_patterns = { "*.txt" },
 	auto_update = true,
+	split_padding = 2,
 	keymaps = {
 		toggle = "<leader>cip",
 		refresh = "<leader>cir",
+		adjust = "<leader>cia",
+		reset = "<leader>civ"
 	},
 }
 
@@ -34,6 +37,11 @@ local function validate_config(opts)
 		valid.auto_update = defaults.auto_update
 	end
 
+	if valid.split_padding and type(valid.split_padding) ~= "number" then
+		vim.notify("caption-image-preview: split_padding must be a number, using default", vim.log.levels.WARN)
+		valid.split_padding = defaults.split_padding
+	end
+
 	if valid.keymaps then
 		if valid.keymaps.toggle and type(valid.keymaps.toggle) ~= "string" and valid.keymaps.toggle ~= false then
 			vim.notify(
@@ -48,6 +56,20 @@ local function validate_config(opts)
 				vim.log.levels.WARN
 			)
 			valid.keymaps.refresh = defaults.keymaps.refresh
+		end
+		if valid.keymaps.adjust and type(valid.keymaps.adjust) ~= "string" and valid.keymaps.adjust ~= false then
+			vim.notify(
+				"caption-image-preview: keymaps.adjust must be a string or false, using default",
+				vim.log.levels.WARN
+			)
+			valid.keymaps.adjust = defaults.keymaps.adjust
+		end
+		if valid.keymaps.reset and type(valid.keymaps.reset) ~= "string" and valid.keymaps.reset ~= false then
+			vim.notify(
+				"caption-image-preview: keymaps.reset must be a string or false, using default",
+				vim.log.levels.WARN
+			)
+			valid.keymaps.reset = defaults.keymaps.reset
 		end
 	end
 
